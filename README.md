@@ -25,43 +25,18 @@ An interactive, production-ready study assistant for students. Built with **Stre
 ## 🏗️ System Architecture
 
 ```mermaid
-flowchart TD
-    %% Presentation Layer
-    subgraph Presentation ["Presentation Layer"]
-        Client["User Web Browser"]
-        Streamlit["Streamlit Web Server (app.py)"]
-    end
-
-    %% Business Layer
-    subgraph Business ["Business Layer"]
-        Auth["Authentication Manager"]
-        TrackSelector["Track Routing"]
-        CacheManager["Cache Controller"]
-        LogManager["Logging Controller"]
-        LLMConnector["LLM Connector (llm.py)"]
-    end
-
-    %% External Services
-    subgraph External ["External Services"]
-        Gemini["Google Gemini API (gemini-2.5-flash)"]
-    end
-
-    %% Data Layer
-    subgraph Data ["Data Layer"]
-        Database["SQLite Database (database.py)"]
-        LogsFile["App Logs (logs/app.log)"]
-    end
-
-    %% Connections
-    Client <--> Streamlit
-    Streamlit <--> Business
+graph TD
+    User([Student]) -->|Interacts| UI[Streamlit Frontend app.py]
+    UI -->|Loads Config| Config[config.py]
+    UI -->|Logs Events| Log[logger.py]
+    UI -->|Authenticates| DB[database.py]
+    UI -->|Transcribes & Queries| LLM[llm.py]
+    UI -->|Checks Cache| DB
     
-    Auth <--> Database
-    CacheManager <--> Database
-    LogManager --> Database
-    LogManager --> LogsFile
-    
-    LLMConnector <--> Gemini
+    LLM -->|Queries API| Gemini[Google Gemini API]
+    DB -->|Reads/Writes Users & Logs| SQLite[(student_assistant.db)]
+    DB -->|Reads/Writes Cache| SQLite
+    Log -->|Writes Logs| LogFile[(logs/app.log)]
 ```
 
 ---
