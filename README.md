@@ -25,121 +25,44 @@ An interactive, production-ready study assistant for students. Built with **Stre
 ## 🏗️ System Architecture
 
 ```mermaid
-flowchart TB
-    subgraph CLIENT["🖥️ Client Layer"]
-        Browser["Web Browser<br/>(localhost:8501)"]
+flowchart TD
+    %% Presentation Layer
+    subgraph Presentation ["Presentation Layer"]
+        Client["User Web Browser"]
+        Streamlit["Streamlit Web Server (app.py)"]
     end
 
-    subgraph UI["🎨 Presentation Layer — app.py"]
-        direction TB
-        Auth["Authentication Gate<br/>(Login / Sign-Up Forms)"]
-        Sidebar["Sidebar Controls<br/>(API Key · Model · Cache · Logs)"]
-        TrackSelect["Track Selector<br/>(Programming · AI/ML · Career · Interview)"]
-        ChatUI["Chat Interface<br/>(Multi-turn Message History)"]
-        VoiceInput["🎙️ Voice Recorder<br/>(streamlit-mic-recorder)"]
-        TextInput["💬 Text Input<br/>(st.chat_input)"]
+    %% Business Layer
+    subgraph Business ["Business Layer"]
+        Auth["Authentication Manager"]
+        TrackSelector["Track Routing"]
+        CacheManager["Cache Controller"]
+        LogManager["Logging Controller"]
+        LLMConnector["LLM Connector (llm.py)"]
     end
 
-    subgraph LOGIC["⚙️ Business Logic Layer"]
-        direction TB
-        Config["config.py<br/>(Settings · Track Prompts · Env Vars)"]
-        LLM["llm.py<br/>(Gemini API Client)"]
-        DB["database.py<br/>(Data Access Layer)"]
-        Logger["logger.py<br/>(RotatingFileHandler)"]
+    %% External Services
+    subgraph External ["External Services"]
+        Gemini["Google Gemini API (gemini-2.5-flash)"]
     end
 
-    subgraph LLM_DETAIL["🤖 LLM Module — llm.py"]
-        direction LR
-        GenResponse["generate_response()<br/>(Multi-turn Chat · System Prompt)"]
-        Transcribe["transcribe_audio()<br/>(Multimodal Speech-to-Text)"]
+    %% Data Layer
+    subgraph Data ["Data Layer"]
+        Database["SQLite Database (database.py)"]
+        LogsFile["App Logs (logs/app.log)"]
     end
 
-    subgraph EXTERNAL["☁️ External Services"]
-        GeminiAPI["Google Gemini API<br/>(gemini-2.5-flash)"]
-    end
-
-    subgraph STORAGE["🗄️ Persistence Layer — SQLite"]
-        direction LR
-        UsersTable["👤 users<br/>(username · password_hash · salt)"]
-        CacheTable["⚡ response_cache<br/>(query_hash · track · response)"]
-        LogsTable["📋 conversation_logs<br/>(username · track · query · response)"]
-    end
-
-    subgraph LOGGING["📝 File Logging"]
-        LogFile["logs/app.log<br/>(5MB · 5 Backups)"]
-    end
-
-    %% Client → UI
-    Browser -->|"HTTP / WebSocket"| Auth
-    Auth -->|"Credentials"| DB
-    DB -->|"PBKDF2 Verify"| UsersTable
-    Auth -->|"Authenticated Session"| TrackSelect
-    TrackSelect --> ChatUI
-    ChatUI --> VoiceInput
-    ChatUI --> TextInput
-
-    %% Sidebar
-    Sidebar -.->|"Override Settings"| Config
-
-    %% Query Flow
-    VoiceInput -->|"Audio Bytes"| Transcribe
-    Transcribe -->|"Transcription Request"| GeminiAPI
-    GeminiAPI -->|"Text Result"| Transcribe
-    TextInput -->|"User Query"| DB
-
-    %% Cache Check
-    DB -->|"SHA-256 Hash Lookup"| CacheTable
-    CacheTable -->|"Cache HIT → Instant Response"| ChatUI
-    CacheTable -->|"Cache MISS"| GenResponse
-
-    %% LLM Generation
-    GenResponse -->|"System Prompt + History"| GeminiAPI
-    GeminiAPI -->|"Generated Response"| GenResponse
-    GenResponse -->|"Store New Response"| CacheTable
-    GenResponse -->|"Display Response"| ChatUI
-
-    %% Logging
-    DB -->|"Log Interaction"| LogsTable
-    Logger -->|"Write Events"| LogFile
-
-    %% Styling
-    classDef clientStyle fill:#1e293b,stroke:#60a5fa,stroke-width:2px,color:#e2e8f0
-    classDef uiStyle fill:#1e1b3a,stroke:#a55eea,stroke-width:2px,color:#e2e8f0
-    classDef logicStyle fill:#1a2332,stroke:#45aaf2,stroke-width:2px,color:#e2e8f0
-    classDef externalStyle fill:#0f2b1d,stroke:#4ade80,stroke-width:2px,color:#e2e8f0
-    classDef storageStyle fill:#2a1a0e,stroke:#fb923c,stroke-width:2px,color:#e2e8f0
-    classDef logStyle fill:#1a1a2e,stroke:#00cec9,stroke-width:2px,color:#e2e8f0
-
-    class Browser clientStyle
-    class Auth,Sidebar,TrackSelect,ChatUI,VoiceInput,TextInput uiStyle
-    class Config,LLM,DB,Logger logicStyle
-    class GenResponse,Transcribe logicStyle
-    class GeminiAPI externalStyle
-    class UsersTable,CacheTable,LogsTable storageStyle
-    class LogFile logStyle
+    %% Connections
+    Client <--> Streamlit
+    Streamlit <--> Business
+    
+    Auth <--> Database
+    CacheManager <--> Database
+    LogManager --> Database
+    LogManager --> LogsFile
+    
+    LLMConnector <--> Gemini
 ```
-
-### Architecture Overview
-
-| Layer | Component | Responsibility |
-|-------|-----------|---------------|
-| **Presentation** | `app.py` (Streamlit) | UI rendering, session state, routing, and glassmorphism styling |
-| **Authentication** | `database.py` → `users` table | PBKDF2-HMAC-SHA256 password hashing with per-user salts |
-| **Track Routing** | `config.py` → `TRACK_PROMPTS` | Maps each track to a specialized system prompt for the LLM |
-| **Cache** | `database.py` → `response_cache` table | SHA-256 keyed query deduplication to save API costs |
-| **LLM Integration** | `llm.py` → Gemini API | Multi-turn chat generation and multimodal audio transcription |
-| **Persistence** | SQLite (`student_assistant.db`) | Users, cached responses, and conversation logs |
-| **Logging** | `logger.py` → `logs/app.log` | Rotating file handler (5 MB × 5 backups) + console output |
-
-### Request Lifecycle
-
-1. **User submits a query** via text input or voice recording
-2. **Voice path**: Audio bytes are sent to Gemini for multimodal transcription → returned as text
-3. **Cache check**: Query + track are SHA-256 hashed and looked up in `response_cache`
-4. **Cache HIT** → Response served instantly from SQLite (no API call)
-5. **Cache MISS** → `llm.generate_response()` sends the query with full chat history and track-specific system prompt to Gemini
-6. **Response stored** in cache for future identical queries
-7. **Interaction logged** to `conversation_logs` table for the authenticated user
 
 ---
 
